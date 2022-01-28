@@ -23,7 +23,16 @@ how all these features work.
 Compile
 -------
 
-    $ make
+#### Prerequisite
+
+MiniLisp require the following to compile and run:
+
+- a `gcc`-like, `gnu c` compatible compiler
+- a unix-like system
+
+```
+$ make
+```
 
 MiniLisp has been tested on Linux x86/x86-64 and 64 bit Mac OS. The code is not
 very architecture dependent, so you should be able to compile and run on other
@@ -244,3 +253,15 @@ proceed to the master branch, to understand the code step by step.
 The nogc branch is available at
 [nogc](https://github.com/rui314/minilisp/tree/nogc). The original is available
 at [master](https://github.com/rui314/minilisp).
+
+Fork
+----
+
+If you're unaware, the last commit on upstream is on 2014, so yes, upstream's dead.
+
+This fork will continue to develop only the master branch and not the nogc one.
+This fork will not remove the original comments, code, and lisp syntax.
+Instead, I will only modify things to increase compatibility by reducing c99
+and further extension. I will also try to remove gnu c and gcc-only
+syntaxes/features, along with removing posix dependency. 
+
