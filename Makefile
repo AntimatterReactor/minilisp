@@ -1,4 +1,4 @@
-CFLAGS=-std=c89 -O3 -Wall
+CFLAGS=-std=c89 -march=native -O3 -Wall
 
 .PHONY: clean test
 

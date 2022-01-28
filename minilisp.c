@@ -1,10 +1,10 @@
-/* This software is in the public domain. */
+/* This software is licensed with The Unlicense,
+** effectively making it released to the public domain. */
 
 #include <assert.h>
 #include <ctype.h>
 #include <stdarg.h>
 #include <stddef.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +12,8 @@
 #define __USE_MISC
 #include <sys/mman.h>
 
+/* If you're having trouble getting this to compile,
+** try to remove __attribute__((noreturn)) from this function. */
 static __attribute__((noreturn)) void error(char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
@@ -173,9 +175,9 @@ static void gc(void *root);
 #define DEFINE4(var1, var2, var3, var4)         \
     Obj **var1, **var2, **var3, **var4;         \
     ADD_ROOT(4);                                \
-    var1 = (Obj **)(root_ADD_ROOT_ + 1);  \
-    var2 = (Obj **)(root_ADD_ROOT_ + 2);  \
-    var3 = (Obj **)(root_ADD_ROOT_ + 3);  \
+    var1 = (Obj **)(root_ADD_ROOT_ + 1);        \
+    var2 = (Obj **)(root_ADD_ROOT_ + 2);        \
+    var3 = (Obj **)(root_ADD_ROOT_ + 3);        \
     var4 = (Obj **)(root_ADD_ROOT_ + 4)
 
 /* Round up the given value to a multiple of size. Size must be a power of 2. It adds size - 1
@@ -218,7 +220,7 @@ static Obj *alloc(void *root, int type, size_t size) {
         error("Memory exhausted");
 
     /* Allocate the object. */
-    obj = memory + mem_nused; /* This pointer arithmetic only works on gnu c */
+    obj = (Obj *)((size_t *)memory + mem_nused);
     obj->type = type;
     obj->size = size;
     mem_nused += size;
@@ -244,7 +246,7 @@ static Obj *forward(Obj *obj) {
 
     /* If the object's address is not in the from-space, the object is not managed by GC nor it
     ** has already been moved to the to-space. */
-    ptrdiff_t offset = (uint8_t *)obj - (uint8_t *)from_space;
+    ptrdiff_t offset = (size_t *)obj - (size_t *)from_space;
     if (offset < 0 || MEMORY_SIZE <= offset)
         return obj;
 
@@ -256,7 +258,7 @@ static Obj *forward(Obj *obj) {
     /* Otherwise, the object has not been moved yet. Move it. */
     newloc = scan2;
     memcpy(newloc, obj, obj->size);
-    scan2 = (Obj *)((uint8_t *)scan2 + obj->size);
+    scan2 = (Obj *)((size_t *)scan2 + obj->size);
 
     /* Put a tombstone at the location where the object used to occupy, so that the following call
     ** of forward() can find the object's new location. */
@@ -322,13 +324,13 @@ static void gc(void *root) {
         default:
             error("Bug: copy: unknown type %d", scan1->type);
         }
-        scan1 = (Obj *)((uint8_t *)scan1 + scan1->size);
+        scan1 = (Obj *)((size_t *)scan1 + scan1->size);
     }
 
     /* Finish up GC. */
     munmap(from_space, MEMORY_SIZE);
     old_nused = mem_nused;
-    mem_nused = (size_t)((uint8_t *)scan1 - (uint8_t *)memory);
+    mem_nused = (size_t)((size_t *)scan1 - (size_t *)memory);
     if (debug_gc)
         fprintf(stderr, "GC: %zu bytes out of %zu bytes copied.\n", mem_nused, old_nused);
     gc_running = 0;
@@ -346,8 +348,7 @@ static Obj *make_int(void *root, int value) {
 
 static Obj *cons(void *root, Obj **car, Obj **cdr) {
     Obj *cell = alloc(root, TCELL, sizeof(Obj *) * 2);
-    cell->car = *car;
-    cell->cdr = *cdr;
+    cell->car = *car, cell->cdr = *cdr;
     return cell;
 }
 
@@ -919,8 +920,7 @@ static Obj *prim_eq(void *root, Obj **env, Obj **list) {
 }
 
 /* (exit) */
-static __attribute__((noreturn)) Obj
-*prim_exit(void *root, Obj **env, Obj **list) { exit(0); }
+static Obj *prim_exit(void *root, Obj **env, Obj **list) { exit(0); }
 
 static void add_primitive(void *root, Obj **env, char *name, Primitive *fn) {
     DEFINE2(sym, prim);
