@@ -12,7 +12,7 @@
 #define __USE_MISC
 #include <sys/mman.h>
 
-static __attribute((noreturn)) void error(char *fmt, ...) {
+static __attribute__((noreturn)) void error(char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);
@@ -661,15 +661,15 @@ static Obj *find(Obj **env, Obj *sym) {
 
 /* Expands the given macro application form. */
 static Obj *macroexpand(void *root, Obj **env, Obj **obj) {
-    if ((*obj)->type != TCELL || (*obj)->car->type != TSYMBOL)
-        return *obj;
-    else {
+    if (!((*obj)->type != TCELL || (*obj)->car->type != TSYMBOL))
+    {
         DEFINE3(bind, macro, args);
         *bind = find(env, (*obj)->car);
         if (!*bind || (*bind)->cdr->type != TMACRO) return *obj;
         *macro = (*bind)->cdr, *args = (*obj)->cdr;
         return apply_func(root, macro, args);
     }
+    return *obj;
 }
 
 /* Evaluates the S expression. */
@@ -685,8 +685,7 @@ static Obj *eval(void *root, Obj **env, Obj **obj) {
     case TSYMBOL: {
         /* Variable */
         Obj *bind = find(env, *obj);
-        if (!bind)
-            error("Undefined symbol: %s", (*obj)->name);
+        if (!bind) error("Undefined symbol: %s", (*obj)->name);
         return bind->cdr;
     }
     case TCELL: {
@@ -778,18 +777,17 @@ static Obj *prim_while(void *root, Obj **env, Obj **list) {
 
 /* (gensym) */
 static Obj *prim_gensym(void *root, Obj **env, Obj **list) {
-  static unsigned short count = 0;
-  char buf[10];
-  sprintf(buf, "G__%u", count++);
-  return make_symbol(root, buf);
+    static unsigned short count = 0;
+    char buf[10];
+    sprintf(buf, "G__%u", count++);
+    return make_symbol(root, buf);
 }
 
 /* (+ <integer> ...) */
 static Obj *prim_plus(void *root, Obj **env, Obj **list) {
     int sum = 0; Obj *args;
     for (args = eval_list(root, env, list); args != Nil; args = args->cdr) {
-        if (args->car->type != TINT)
-            error("+ takes only numbers");
+        if (args->car->type != TINT) error("+ takes only numbers");
         sum += args->car->value;
     }
     return make_int(root, sum);
@@ -797,13 +795,13 @@ static Obj *prim_plus(void *root, Obj **env, Obj **list) {
 
 /* (- <integer> ...) */
 static Obj *prim_minus(void *root, Obj **env, Obj **list) {
-    Obj *args = eval_list(root, env, list), *p;
+    Obj *args = eval_list(root, env, list), *p; int r;
     for (p = args; p != Nil; p = p->cdr)
         if (p->car->type != TINT)
             error("- takes only numbers");
     if (args->cdr == Nil)
         return make_int(root, -args->car->value);
-    int r = args->car->value;
+    else r = args->car->value;
     for (p = args->cdr; p != Nil; p = p->cdr)
         r -= p->car->value;
     return make_int(root, r);
@@ -812,8 +810,7 @@ static Obj *prim_minus(void *root, Obj **env, Obj **list) {
 /* (< <integer> <integer>) */
 static Obj *prim_lt(void *root, Obj **env, Obj **list) {
     Obj *args = eval_list(root, env, list), *x, *y;
-    if (length(args) != 2)
-        error("malformed <");
+    if (length(args) != 2) error("malformed <");
     x = args->car, y = args->cdr->car;
     if (x->type != TINT || y->type != TINT)
         error("< takes only numbers");
@@ -831,15 +828,13 @@ static Obj *handle_function(void *root, Obj **env, Obj **list, int type) {
     if (p != Nil && p->type != TSYMBOL)
         error("Parameter must be a symbol");
     DEFINE2(params, body);
-    *params = (*list)->car;
-    *body = (*list)->cdr;
+    *params = (*list)->car, *body = (*list)->cdr;
     return make_function(root, env, type, params, body);
 }
 
 /* (lambda (<symbol> ...) expr ...) */
-static Obj *prim_lambda(void *root, Obj **env, Obj **list) {
-    return handle_function(root, env, list, TFUNCTION);
-}
+static Obj *prim_lambda(void *root, Obj **env, Obj **list)
+{ return handle_function(root, env, list, TFUNCTION); }
 
 static Obj *handle_defun(void *root, Obj **env, Obj **list, int type) {
     if ((*list)->car->type != TSYMBOL || (*list)->cdr->type != TCELL)
@@ -923,6 +918,10 @@ static Obj *prim_eq(void *root, Obj **env, Obj **list) {
     return values->car == values->cdr->car ? True : Nil;
 }
 
+/* (exit) */
+static __attribute__((noreturn)) Obj
+*prim_exit(void *root, Obj **env, Obj **list) { exit(0); }
+
 static void add_primitive(void *root, Obj **env, char *name, Primitive *fn) {
     DEFINE2(sym, prim);
     *sym = intern(root, name);
@@ -957,6 +956,7 @@ static void define_primitives(void *root, Obj **env) {
     add_primitive(root, env, "=", prim_num_eq);
     add_primitive(root, env, "eq", prim_eq);
     add_primitive(root, env, "println", prim_println);
+    add_primitive(root, env, "exit", prim_exit);
 }
 
 /*====================================================================**
