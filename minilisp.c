@@ -9,16 +9,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define __USE_MISC
-#include <sys/mman.h>
-
 /* If you're having trouble getting this to compile,
-** try to remove __attribute__((noreturn)) from this function. */
+** try removing __attribute__((noreturn)) from this function. */
 static __attribute__((noreturn)) void error(char *fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
+    fputc('\n', stderr);
     va_end(ap);
     exit(1);
 }
@@ -268,7 +265,7 @@ static Obj *forward(Obj *obj) {
 }
 
 static void *alloc_semispace() {
-    return mmap(NULL, MEMORY_SIZE, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+    return calloc(1, MEMORY_SIZE);
 }
 
 /* Copies the root objects. */
@@ -328,7 +325,8 @@ static void gc(void *root) {
     }
 
     /* Finish up GC. */
-    munmap(from_space, MEMORY_SIZE);
+    free(from_space);
+    from_space = NULL;
     old_nused = mem_nused;
     mem_nused = (size_t)((size_t *)scan1 - (size_t *)memory);
     if (debug_gc)
@@ -368,16 +366,13 @@ static Obj *make_function(void *root, Obj **env, int type, Obj **params, Obj **b
     Obj *r;
     assert(type == TFUNCTION || type == TMACRO);
     r = alloc(root, type, sizeof(Obj *) * 3);
-    r->params = *params;
-    r->body = *body;
-    r->env = *env;
+    r->params = *params, r->body = *body, r->env = *env;
     return r;
 }
 
 struct Obj *make_env(void *root, Obj **vars, Obj **up) {
     Obj *r = alloc(root, TENV, sizeof(Obj *) * 2);
-    r->vars = *vars;
-    r->up = *up;
+    r->vars = *vars, r->up = *up;
     return r;
 }
 
@@ -410,8 +405,7 @@ static Obj *reverse(Obj *p) {
     Obj *ret = Nil;
     while (p != Nil) {
         Obj *head = p;
-        p = p->cdr;
-        head->cdr = ret;
+        p = p->cdr, head->cdr = ret;
         ret = head;
     }
     return ret;
@@ -543,20 +537,14 @@ static void print(Obj *obj) {
         }
         printf(")");
         return;
-    case TINT:
-        printf("%d", obj->value); return;
-    case TSYMBOL:
-        printf("%s", obj->name); return;
-    case TPRIMITIVE:
-        printf("<primitive>"); return;
-    case TFUNCTION:
-        printf("<function>"); return;
-    case TMACRO:
-        printf("<macro>"); return;
-    case TMOVED:
-        printf("<moved>"); return;
-    case TTRUE: printf("t"); return;
-    case TNIL: printf("()"); return;
+    case TINT:       printf("%d", obj->value); return;
+    case TSYMBOL:    printf("%s", obj->name);  return;
+    case TPRIMITIVE: printf("<primitive>");    return;
+    case TFUNCTION:  printf("<function>");     return;
+    case TMACRO:     printf("<macro>");        return;
+    case TMOVED:     printf("<moved>");        return;
+    case TTRUE:      printf("t");              return;
+    case TNIL:       printf("()");             return;
     default:
         error("Bug: print: Unknown tag type: %d", obj->type);
     }
@@ -590,8 +578,7 @@ static Obj *push_env(void *root, Obj **env, Obj **vars, Obj **vals) {
     for (; (*vars)->type == TCELL; *vars = (*vars)->cdr, *vals = (*vals)->cdr) {
         if ((*vals)->type != TCELL)
             error("Cannot apply function: number of argument does not match");
-        *sym = (*vars)->car;
-        *val = (*vals)->car;
+        *sym = (*vars)->car, *val = (*vals)->car;
         *map = acons(root, sym, val, map);
     }
     if (*vars != Nil)
@@ -627,8 +614,7 @@ static char is_list(Obj *obj) {
 
 static Obj *apply_func(void *root, Obj **fn, Obj **args) {
     DEFINE3(params, newenv, body);
-    *params = (*fn)->params;
-    *newenv = (*fn)->env;
+    *params = (*fn)->params, *newenv = (*fn)->env;
     *newenv = push_env(root, newenv, params, args);
     *body = (*fn)->body;
     return progn(root, newenv, body);
@@ -662,7 +648,7 @@ static Obj *find(Obj **env, Obj *sym) {
 
 /* Expands the given macro application form. */
 static Obj *macroexpand(void *root, Obj **env, Obj **obj) {
-    if (!((*obj)->type != TCELL || (*obj)->car->type != TSYMBOL))
+    if ((*obj)->type == TCELL && (*obj)->car->type == TSYMBOL)
     {
         DEFINE3(bind, macro, args);
         *bind = find(env, (*obj)->car);
@@ -743,15 +729,16 @@ static Obj *prim_cdr(void *root, Obj **env, Obj **list) {
 
 /* (setq <symbol> expr) */
 static Obj *prim_setq(void *root, Obj **env, Obj **list) {
-    if (length(*list) != 2 || (*list)->car->type != TSYMBOL)
-        error("Malformed setq");
-    DEFINE2(bind, value);
-    *bind = find(env, (*list)->car);
-    if (!*bind) error("Unbound variable %s", (*list)->car->name);
-    *value = (*list)->cdr->car;
-    *value = eval(root, env, value);
-    (*bind)->cdr = *value;
-    return *value;
+    if (length(*list) == 2 && (*list)->car->type == TSYMBOL) {
+        DEFINE2(bind, value);
+        *bind = find(env, (*list)->car);
+        if (!*bind) error("Unbound variable %s", (*list)->car->name);
+        *value = (*list)->cdr->car;
+        *value = eval(root, env, value);
+        (*bind)->cdr = *value;
+        return *value;
+    }
+    error("Malformed setq");
 }
 
 /* (setcar <cell> expr) */
@@ -766,14 +753,16 @@ static Obj *prim_setcar(void *root, Obj **env, Obj **list) {
 
 /* (while cond expr ...) */
 static Obj *prim_while(void *root, Obj **env, Obj **list) {
-    if (length(*list) < 2) error("Malformed while");
-    DEFINE2(cond, exprs);
-    *cond = (*list)->car;
-    while (eval(root, env, cond) != Nil) {
-        *exprs = (*list)->cdr;
-        eval_list(root, env, exprs);
+    if (length(*list) >= 2) {
+        DEFINE2(cond, exprs);
+        *cond = (*list)->car;
+        while (eval(root, env, cond) != Nil) {
+            *exprs = (*list)->cdr;
+            eval_list(root, env, exprs);
+        }
+        return Nil;
     }
-    return Nil;
+    error("Malformed while");
 }
 
 /* (gensym) */
@@ -870,11 +859,12 @@ static Obj *prim_defmacro(void *root, Obj **env, Obj **list) {
 
 /* (macroexpand expr) */
 static Obj *prim_macroexpand(void *root, Obj **env, Obj **list) {
-    if (length(*list) != 1)
-        error("Malformed macroexpand");
-    DEFINE1(body);
-    *body = (*list)->car;
-    return macroexpand(root, env, body);
+    if (length(*list) == 1) {
+        DEFINE1(body);
+        *body = (*list)->car;
+        return macroexpand(root, env, body);
+    }
+    error("Malformed macroexpand");
 }
 
 /* (println expr) */
@@ -969,12 +959,22 @@ static char getEnvFlag(char *name) {
     return val && val[0];
 }
 
+/* Free allocated garbage collection memory at exit. */
+void free_all(void) {
+    free(memory);
+    if(from_space)
+        free(from_space);
+}
+
 int main(void) {
     void *root = NULL;
 
     /* Debug flags */
     debug_gc = getEnvFlag("MINILISP_DEBUG_GC");
     always_gc = getEnvFlag("MINILISP_ALWAYS_GC");
+
+    /* Call free_all on exit */
+    atexit(free_all);
 
     /* Memory allocation */
     memory = alloc_semispace();
