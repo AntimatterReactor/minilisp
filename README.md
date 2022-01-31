@@ -23,16 +23,7 @@ how all these features work.
 Compile
 -------
 
-#### Prerequisite
-
-MiniLisp require the following to compile and run:
-
-- a `gcc`-like, `gnu c` compatible compiler
-- a unix-like system
-
-```
-$ make
-```
+    $ make
 
 MiniLisp has been tested on Linux x86/x86-64 and 64 bit Mac OS. The code is not
 very architecture dependent, so you should be able to compile and run on other
