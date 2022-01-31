@@ -39,10 +39,7 @@ enum {
     ** handle the object of this type. Other functions will never see the object of this type. */
     TMOVED,
     /* Const objects. They are statically allocated and will never be managed by GC. */
-    TTRUE,
-    TNIL,
-    TDOT,
-    TCPAREN
+    TTRUE, TNIL, TDOT, TCPAREN
 };
 
 /* Typedef for the primitive function */
@@ -105,6 +102,9 @@ static Obj *Symbols;
 
 /* The size of the heap in byte */
 #define MEMORY_SIZE 65536
+
+/* For pointer arithmetics and casts */
+typedef unsigned char uchar;
 
 /* The pointer pointing to the beginning of the current heap */
 static void *memory;
@@ -217,7 +217,7 @@ static Obj *alloc(void *root, const int type, size_t size) {
         error("Memory exhausted");
 
     /* Allocate the object. */
-    obj = (Obj *)((size_t *)memory + mem_nused);
+    obj = (Obj *)((uchar *)memory + mem_nused);
     obj->type = type, obj->size = size;
     mem_nused += size;
     return obj;
@@ -242,7 +242,7 @@ static Obj *forward(Obj *obj) {
 
     /* If the object's address is not in the from-space, the object is not managed by GC nor it
     ** has already been moved to the to-space. */
-    ptrdiff_t offset = (size_t *)obj - (size_t *)from_space;
+    ptrdiff_t offset = (uchar *)obj - (uchar *)from_space;
     if (offset < 0 || MEMORY_SIZE <= offset)
         return obj;
 
@@ -254,7 +254,7 @@ static Obj *forward(Obj *obj) {
     /* Otherwise, the object has not been moved yet. Move it. */
     newloc = scan2;
     memcpy(newloc, obj, obj->size);
-    scan2 = (Obj *)((size_t *)scan2 + obj->size);
+    scan2 = (Obj *)((uchar *)scan2 + obj->size);
 
     /* Put a tombstone at the location where the object used to occupy, so that the following call
     ** of forward() can find the object's new location. */
@@ -319,13 +319,13 @@ static void gc(void *root) {
         default:
             error("Bug: copy: unknown type %d", scan1->type);
         }
-        scan1 = (Obj *)((size_t *)scan1 + scan1->size);
+        scan1 = (Obj *)((uchar *)scan1 + scan1->size);
     }
 
     /* Finish up GC. */
     free(from_space);
     from_space = NULL, old_nused = mem_nused;
-    mem_nused = (size_t)((size_t *)scan1 - (size_t *)memory);
+    mem_nused = (size_t)((uchar *)scan1 - (uchar *)memory);
     if (debug_gc)
         fprintf(stderr, "GC: %lu bytes out of %lu bytes copied.\n", mem_nused, old_nused);
     gc_running = 0;
