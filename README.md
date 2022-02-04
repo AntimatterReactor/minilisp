@@ -236,23 +236,18 @@ The comment continues to the end of line.
 No GC Branch
 ------------
 
-There is a MiniLisp branch from which the code for garbage collection has been
-stripped. The accepted language is the same, but the code is simpler than the
-master branch's one. The reader might want to read the nogc branch first, then
-proceed to the master branch, to understand the code step by step.
-
-The nogc branch is available at
-[nogc](https://github.com/rui314/minilisp/tree/nogc). The original is available
-at [master](https://github.com/rui314/minilisp).
+In this fork there are no such branch, since it has been deemed redundant to
+continue developing such code whose only purpose is to be looked at.
 
 Fork
 ----
 
-If you're unaware, the last commit on upstream is on 2014, so yes, upstream's dead.
+If you're unaware, the last commit on upstream is on 2014. Which means that
+the code on this fork will never be merged to upstream.
 
-This fork will continue to develop only the master branch and not the nogc one.
-This fork will not remove the original comments, code, and lisp syntax.
-Instead, I will only modify things to increase compatibility by reducing c99
-and further extension. I will also try to remove gnu c and gcc-only
-syntaxes/features, along with removing posix dependency. 
-
+This fork has succeded in removing posix requirement, reducing the minimum
+required c standard, and removing gnu c syntaxes. Although with a bit of a
+cost. The need to pack more code has left the source code rather cluttered,
+perhaps harder to read. But, as promised no original comments nor most of the
+code has been tampered with. The program hopefully still works the same way as
+the original.
