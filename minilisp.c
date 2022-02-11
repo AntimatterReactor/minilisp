@@ -116,9 +116,7 @@ static void *from_space;
 static size_t mem_nused = 0;
 
 /* Flags to debug GC */
-static char gc_running = 0;
-static char debug_gc = 0;
-static char always_gc = 0;
+static char gc_running = 0, debug_gc = 0, always_gc = 0;
 
 static void gc(void *root);
 
@@ -213,8 +211,7 @@ static Obj *alloc(void *root, const int type, size_t size) {
 
     /* Terminate the program if we couldn't satisfy the memory request. This can happen if the
     ** requested size was too large or the from-space was filled with too many live objects. */
-    if (MEMORY_SIZE < mem_nused + size)
-        error("Memory exhausted");
+    if (MEMORY_SIZE < mem_nused + size) error("Memory exhausted");
 
     /* Allocate the object. */
     obj = (Obj *)((uchar *)memory + mem_nused);
@@ -242,13 +239,11 @@ static Obj *forward(Obj *obj) {
     /* If the object's address is not in the from-space, the object is not managed by GC nor it
     ** has already been moved to the to-space. */
     ptrdiff_t offset = (uchar *)obj - (uchar *)from_space;
-    if (offset < 0 || MEMORY_SIZE <= offset)
-        return obj;
+    if (offset < 0 || MEMORY_SIZE <= offset) return obj;
 
     /* The pointer is pointing to the from-space, but the object there was a tombstone. Follow the
     ** forwarding pointer to find the new location of the object. */
-    if (obj->type == TMOVED)
-        return obj->obval.moved;
+    if (obj->type == TMOVED) return obj->obval.moved;
 
     /* Otherwise, the object has not been moved yet. Move it. */
     newloc = scan2;
@@ -261,9 +256,7 @@ static Obj *forward(Obj *obj) {
     return newloc;
 }
 
-static void *alloc_semispace() {
-    return calloc(1, MEMORY_SIZE);
-}
+static void *alloc_semispace() { return calloc(1, MEMORY_SIZE); }
 
 /* Copies the root objects. */
 static void forward_root_objects(void *root) {
@@ -386,7 +379,7 @@ static Obj *acons(void *root, Obj **x, Obj **y, Obj **a) {
 **====================================================================*/
 
 #define SYMBOL_MAX_LEN 200
-const char symbol_chars[] = "~!@#$%^&*-_=+:/?<>";
+static const char symbol_chars[] = "~!@#$%^&*-_=+:/?<>";
 
 static Obj *read_expr(void *root);
 
@@ -427,10 +420,8 @@ static Obj *read_list(void *root) {
     *head = &Nil;
     for (;;) {
         *obj = read_expr(root);
-        if (!*obj)
-            error("Unclosed parenthesis");
-        if (*obj == &Cparen)
-            return reverse(*head);
+        if (!*obj) error("Unclosed parenthesis");
+        if (*obj == &Cparen) return reverse(*head);
         if (*obj == &Dot) {
             Obj *ret;
             *last = read_expr(root);
@@ -489,28 +480,16 @@ static Obj *read_symbol(void *root, char c) {
 static Obj *read_expr(void *root) {
     for (;;) {
         int c = getchar();
-        if (isspace(c))
-            continue;
-        if (c == EOF)
-            return NULL;
-        if (c == ';') {
-            skip_line();
-            continue;
-        }
-        if (c == '(')
-            return read_list(root);
-        if (c == ')')
-            return &Cparen;
-        if (c == '.')
-            return &Dot;
-        if (c == '\'')
-            return read_quote(root);
-        if (isdigit(c))
-            return make_int(root, read_number(c - '0'));
-        if (c == '-' && isdigit(peek()))
-            return make_int(root, -read_number(0));
-        if (isalpha(c) || strchr(symbol_chars, c))
-            return read_symbol(root, c);
+        if (isspace(c)) continue;
+        if (c == EOF) return NULL;
+        if (c == ';') { skip_line(); continue; }
+        if (c == '(') return read_list(root);
+        if (c == ')') return &Cparen;
+        if (c == '.') return &Dot;
+        if (c == '\'') return read_quote(root);
+        if (isdigit(c)) return make_int(root, read_number(c - '0'));
+        if (c == '-' && isdigit(peek())) return make_int(root, -read_number(0));
+        if (isalpha(c) || strchr(symbol_chars, c)) return read_symbol(root, c);
         error("Don't know how to handle %c", c);
     }
 }
@@ -605,9 +584,7 @@ static Obj *eval_list(void *root, Obj **env, Obj **list) {
     return reverse(*head);
 }
 
-static char is_list(Obj *obj) {
-    return obj == &Nil || obj->type == TCELL;
-}
+static char is_list(Obj *obj) { return obj == &Nil || obj->type == TCELL; }
 
 static Obj *apply_func(void *root, Obj **fn, Obj **args) {
     DEFINE3(params, newenv, body);
@@ -794,6 +771,28 @@ static Obj *prim_minus(void *root, Obj **env, Obj **list) {
     return make_int(root, r);
 }
 
+/* (* <integer> ...) */
+static Obj *prim_mult(void *root, Obj **env, Obj **list) {
+    int product = 1; Obj *args;
+    for (args = eval_list(root, env, list); args != &Nil; args = args->obval.cell.cdr) {
+        if (args->obval.cell.car->type != TINT) error("* takes only numbers");
+        product *= args->obval.cell.car->obval.value;
+    }
+    return make_int(root, product);
+}
+
+/* (/ <integer> ...) */
+static Obj *prim_div(void *root, Obj **env, Obj **list) {
+    Obj *args = eval_list(root, env, list), *p; int r;
+    for (p = args; p != &Nil; p = p->obval.cell.cdr)
+        if (p->obval.cell.car->type != TINT)
+            error("- takes only numbers");
+    r = args->obval.cell.car->obval.value;
+    for (p = args->obval.cell.cdr; p != &Nil; p = p->obval.cell.cdr)
+        r /= p->obval.cell.car->obval.value;
+    return make_int(root, r);
+}
+
 /* (< <integer> <integer>) */
 static Obj *prim_lt(void *root, Obj **env, Obj **list) {
     Obj *args = eval_list(root, env, list), *x, *y;
@@ -934,6 +933,8 @@ static void define_primitives(void *root, Obj **env) {
     add_primitive(root, env, "gensym", prim_gensym);
     add_primitive(root, env, "+", prim_plus);
     add_primitive(root, env, "-", prim_minus);
+    add_primitive(root, env, "*", prim_mult);
+    add_primitive(root, env, "/", prim_div);
     add_primitive(root, env, "<", prim_lt);
     add_primitive(root, env, "define", prim_define);
     add_primitive(root, env, "defun", prim_defun);
@@ -960,8 +961,7 @@ static char getEnvFlag(char *name) {
 /* Free allocated garbage collection memory at exit. */
 static void free_all(void) {
     free(memory);
-    if(from_space)
-        free(from_space);
+    if(from_space) free(from_space);
 }
 
 int main(void) {
